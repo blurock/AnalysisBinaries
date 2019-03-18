@@ -1,0 +1,86 @@
+#!/bin/sh
+#
+# FILE     MakePackageDoc
+# PACKAGE  Maintenance
+# AUTHOR   Andreas Neubacher
+#
+# CONTENT
+#   Shell script for creating the .texi files of a single package for the
+#   STURM Texinfo manual.
+#
+# COPYRIGHT (C) 1995 RISC Linz
+
+#I
+
+. `dirname $0`/CodeBase.sh
+
+
+#F MakePackageDoc FILES  . . .  Creates .texi files from given source FILES.
+#
+# DESCRIPTION
+#   Create the .texi files in the current directory for the given source
+#   files.
+#
+# OPTIONS
+#   -h ... print usage message.
+#
+# EXIT CODES
+    ERR_ARGS=1 # Error on arguments.
+    ERR_FILE=2 # Error in file/directory access.
+    ERR_PARS=3 # Error in parsing.
+#
+# SEE ALSO
+#   (texinfo.info)Top
+
+#
+# 1. Parse arguments.
+#
+
+if [ "$1" = -debug ]; then
+  set -vx
+  shift
+fi
+
+endopts=""
+while [ "$endopts" = "" ]; do
+  case $1 in
+  -h) help; exit 0;;
+  --) endopts=1; shift;;
+   *) endopts=1;;
+  esac
+done
+
+if [ $# = 0 ]; then
+  help
+  exit $ERR_ARGS
+fi
+
+#
+# 2. Build files.
+#
+
+find . -type f -name "*.texi" ! -name "xxAUXxx.*" -exec rm -f {} \;
+umask 000
+err=0
+cat $* 2>/dev/null \
+  | `dirname $0`/code2texi -s 50
+if [ $? != 0 ]; then
+  eecho Parse error for package \"$i\".
+  err=$ERR_PARS
+fi
+eecho Time for Substitutions..............................
+for t in *.texi; do
+  for s in *.sub; do
+    eecho 'sed -f $s <"$t" >"$t".tmp'
+    sed -f $s <"$t" >"$t".tmp
+    if [ $? != 0 ]; then
+      eecho \"$s\" not parseable by sed when processing \"$t\".
+      err=$ERR_PARS
+      rm -f "$t".tmp
+    else
+      rm -f "$t"; mv "$t".tmp "$t"
+    fi
+  done
+done
+
+exit $err

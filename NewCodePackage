@@ -1,0 +1,226 @@
+#!/bin/sh
+#
+# FILE     NewCodePackage
+# PACKAGE  Maintenance
+# AUTHORS  Andreas Neubacher
+#          modified for general code package by Edward S. Blurock
+#
+# CONTENT
+#   Shell script for setting up a new package in a specified environment
+#
+#c COPYRIGHT (C) 1997 RISC Linz
+
+#I
+
+. `dirname $0`/CodeBase.sh
+
+AUTOMATIC=y
+
+#f getpac . . . . . Sets the variable PAC to the 3-letter code for the package.
+
+getpac() {
+  PAC=`echo $PACKAGE | cut -c1-4`
+  answer=n
+  while [ "$answer" != "y" ]; do
+    echo The namespace for the package \"$PACKAGE\" is: \"$PAC\"
+    nlecho "Please enter 'y' if this is correct, 'n' otherwise: "
+    read answer
+    if [ "$answer" != "y" ]; then
+      nlecho "Please enter the abbreviation (3-4 letters) for \"$PACKAGE\": "
+      read PAC
+    fi
+  done
+}
+
+#f patchfile FROM TO . . . . . . . . . Copies and patches FROM file to TO file.
+
+patchfile() {
+  UPPER_PACKAGE=`echo $PACKAGE | tr [a-z] [A-Z]`
+  sed "s/=Package=/$PACKAGE/g;\
+       s/=PACKAGE=/$UPPER_PACKAGE/g;\
+       s/=Environment=/$Environment/g;\
+       s/=Pac=/$PAC/g;s/=Author=/$NAME/g" $1 >$2
+}
+
+#F newsturmpackage PACKAGE ENVIRONMENT [SHORT_NAME [AUTHOR]] . . . . . Set up a new Package
+#						   package working directory.
+#------------------------------------------------------------------------------
+# DESCRIPTION
+#   This script creates a new working directory tree for package PACKAGE,
+#   namespace name "SHORT_NAME" and author "AUTHOR".  All required
+#   directories and default makefiles are set up.
+#
+#   The environment variable `CodeBaseRoot' must be set giving the path to the
+#   Code root directory.
+#
+# EXIT CODES
+    ERR_ARGS=1 # Error on arguments.
+    ERR_ENV=2  # Error on environment.
+    ERR_FILE=3 # File error.
+#
+
+#
+# 1. Argument and environment check.
+#
+
+if [ "$CodeBaseRoot" = "" ]; then
+  eecho '$CodeBaseRoot' is not set!
+  exit $ERR_ENV
+fi
+
+if [ $# = 0 -o "$1" = "-h" -o $# -gt 4 ]; then
+  help
+  echo >&2 Already existing packages are:
+  packages >&2
+  exit $ERR_ARGS
+fi
+
+PACKAGE=$1
+Environment=$2
+
+if packages | egrep "([ 	]|^)$PACKAGE([ 	]|$)" >/dev/null; then
+  echo The following packages already exist:
+  packages
+  cat <<ENDOFTEXT
+
+Please consider whether you really want to create a new package directory
+for existing package "$PACKAGE".
+
+ENDOFTEXT
+
+
+if [ "$AUTOMATIC" = "y" ]; then
+    answer=y
+else
+    answer=x
+fi
+ while [ "$answer" != "y" -a "$answer" != "n" ]; do
+    nlecho "Please enter 'y' to continue or 'n' to abort: "
+    read answer
+  done
+  if [ "$answer" = "n" ]; then
+    echo "Setup aborted -- no files and directories have been created."
+    exit 0
+  else
+    echo
+  fi
+fi
+
+if [ "$3" = "" ]; then
+  getpac
+else
+  PAC=$3
+fi
+if [ "$4" = "" ]; then
+  getauthname
+else
+  NAME=$4
+fi
+
+
+#
+# 2. Ask for confirmation.
+#
+
+cat <<ENDOFTEXT
+This script will create a package working directory in the current directory
+
+	`pwd`
+
+for the package "$PACKAGE", using "$PAC" for the package's namespace.
+The author's name is "$NAME".  Are these values correct?
+
+ENDOFTEXT
+if [ "$AUTOMATIC" = "y" ]; then
+    answer=y
+else
+    answer=x
+fi
+while [ "$answer" != "y" -a "$answer" != "n" ]; do
+  nlecho "Please enter 'y' to continue or 'n' to abort: "
+  read answer
+done
+if [ "$answer" = "n" ]; then
+  echo "Setup aborted -- no files and directories have been created."
+  exit 0
+else
+  echo
+fi
+
+
+#
+# 3. Set up directories.
+#
+
+echo ===========================================================================
+echo Setting up directories ...
+
+mkdir $PACKAGE \
+  || errexit $ERR_FILE Could not create directory \'$PACKAGE/\'!
+cd $PACKAGE
+mkdir src include obj lib info doc examples bin etc test \
+  || errexit $ERR_FILE Could not create directories in\'$PACKAGE/\'!
+mkdir include/$Environment doc/Texi etc/$Environment \
+  || errexit $ERR_FILE Could not create misc. subdirectories!
+ln -s ../src include/"$Environment"Src \
+  || errexit $ERR_FILE Could not create softlink \"include/$EnvironmentSrc\"!
+mkdir src/$PACKAGE examples/$PACKAGE obj/$PACKAGE doc/Texi/$PACKAGE \
+  || errexit $ERR_FILE Could not create package specific directories!
+
+#
+# 4. Set up sample files.
+#
+
+echo Copying files ...
+
+# Sources.
+patchfile $CodeBaseRoot/etc/$Environment/Default/Package.hh include/$Environment/$PACKAGE.hh \
+  || errexit $ERR_FILE Could not create file  \"include/$Environment/$PACKAGE.hh\"!
+patchfile $CodeBaseRoot/etc/$Environment/Default/PackageType.hh include/$Environment/"$PACKAGE"Type.hh \
+  || errexit $ERR_FILE Could not create file  \"include/$Environment/"$PACKAGE"Type.hh\"!
+patchfile $CodeBaseRoot/etc/$Environment/Default/Package.icc src/$PACKAGE/$PACKAGE.icc \
+  || errexit $ERR_FILE Could not create file  \"src/$PACKAGE/$PACKAGE.icc\"!
+patchfile $CodeBaseRoot/etc/$Environment/Default/Package.cc src/$PACKAGE/$PACKAGE.cc \
+  || errexit $ERR_FILE Could not create file  \"src/$PACKAGE/$PACKAGE.cc\"!
+#patchfile $CodeBaseRoot/etc/$Environment/Default/Inlines.cc src/$PACKAGE/Inlines.cc \
+#  || errexit $ERR_FILE Could not create file  \"src/$PACKAGE/Inlines.cc\"!
+# Documentation.
+patchfile $CodeBaseRoot/etc/$Environment/Default/Main.texi doc/Texi/$PACKAGE/Main.texi \
+  || errexit $ERR_FILE Could not create file \"doc/Texi/$PACKAGE/Main.texi\"!
+patchfile $CodeBaseRoot/etc/$Environment/Default/Package.texi doc/Texi/$PACKAGE.texi \
+  || errexit $ERR_FILE Could not create file \"doc/Texi/$PACKAGE.texi\"!
+patchfile $CodeBaseRoot/etc/$Environment/Default/Packages.head doc/Texi/Packages.head \
+  || errexit $ERR_FILE Could not create file \"doc/Texi/Packages.head\"!
+patchfile $CodeBaseRoot/etc/$Environment/Default/doc-Makefile doc/Texi/Makefile \
+  || errexit $ERR_FILE Could not create file \"doc/Texi/Makefile\"!
+patchfile $CodeBaseRoot/etc/$Environment/Default/Configuration.texi \
+          doc/Texi/Configuration.texi \
+  || errexit $ERR_FILE Could not create file \"doc/Texi/Configuration.texi\"!
+# Etc.
+patchfile $CodeBaseRoot/etc/$Environment/Default/MakeDef etc/$Environment/MakeDef \
+  || errexit $ERR_FILE Could not create file  \"etc/$Environment/MakeDef\"!
+patchfile $CodeBaseRoot/etc/$Environment/Default/Makefile.obj etc/$Environment/Makefile.obj \
+  || errexit $ERR_FILE Could not create file  \"etc/$Environment/Makefile.obj\"!
+patchfile $CodeBaseRoot/etc/$Environment/Default/examples-Makefile examples/$PACKAGE/Makefile \
+  || errexit $ERR_FILE Could not create file  \"examples/$PACKAGE/Makefile\"!
+patchfile $CodeBaseRoot/etc/$Environment/Default/lib-Makefile lib/Makefile \
+  || errexit $ERR_FILE Could not create file  \"lib/Makefile\"!
+patchfile $CodeBaseRoot/etc/$Environment/Default/test-Makefile test/Makefile \
+  || errexit $ERR_FILE Could not create file  \"test/Makefile\"!
+
+
+#
+# 5. Finished.
+#
+
+cat <<ENDOFTEXT
+
+===========================================================================
+The working directory tree for package "$PACKAGE" has successfully been set
+up.
+
+Thanks for developing a new package for the $Environment library!
+
+May you be successful and not be pestered too much by bugs!  ;-)
+ENDOFTEXT
+

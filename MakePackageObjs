@@ -1,0 +1,117 @@
+#!/bin/sh
+#
+# FILE     MakePackageObjs
+# PACKAGE  Maintenance
+# AUTHOR   Andreas Neubacher
+#
+# CONTENT
+#   Shell script for creating the code object files.
+#
+# COPYRIGHT (C) 1997 
+
+#I
+
+. `dirname $0`/CodeBase.sh
+
+
+#F makesturmobjs [seq|par] [opt|deb|pro] PACKAGE DIR ENV . .  Creates *.o files.
+#
+# DESCRIPTION
+#   Creates the object files for the PACKAGE with root directory
+#   DIR.  If PACKAGE is "all" all packages are build.  DIR must be an
+#   absolute path. The ENV gives the enviroment name.
+#
+#   * "seq" chooses the sequential version, "par" chooses the parallel
+#     version of the kernel.  Default is "seq".
+#   * "opt" chooses the optimizing version, "deb" chooses the debugging
+#     version, "pro" chooses the profiling version.  Default is "opt".
+#
+#   Source files are taken from "DIR/src/PACKAGE", object files are
+#   produced in "DIR/obj_[o|d|p]/*".
+#
+#   The environment variable MAKE should be set appropriately, otherwise
+#   "make" is chosen by default as the make command.
+#
+# OPTIONS
+#   -h ... print usage message.
+#
+# EXIT CODES
+    ERR_ARGS=1 # Error on arguments.
+    ERR_FILE=2 # Error in file/directory access.
+    ERR_PARS=3 # Error in parsing.
+#
+# SEE ALSO
+#   make(1)
+
+#
+# 1. Parse arguments.
+#
+
+if [ "$1" = -debug ]; then
+  set -vx
+  shift
+fi
+
+LType="sequential"
+LSpeed="optimized"
+LS=o
+
+endopts=""
+while [ "$endopts" = "" ]; do
+  case $1 in
+  -h) help; exit 0;;
+  seq) LType="sequential"; shift;;
+  par) LType="parallel"; shift;;
+  opt) LSpeed="optimized"; LS=o; shift;;
+  deb) LSpeed="debugging"; LS=d; shift;;
+  pro) LSpeed="profiling"; LS=p; shift;;
+  --) endopts=1; shift;;
+   *) endopts=1;;
+  esac
+done
+
+if [ $# != 2 ]; then
+  help
+  exit $ERR_ARGS
+else
+  PACKAGE="$1"
+  DIR="$2"
+fi
+
+if [ "$PACKAGE" = "all" ]; then
+  PACKAGE=`cd $DIR/src; /bin/ls`
+fi
+
+if [ "$MAKE" = "" ]; then
+  MAKE=make
+fi
+
+OBJDIR=$DIR/obj_"$LS"
+SRCDIR=$DIR/src
+#
+# 2. Compile source files.
+#
+umask 000
+
+if [ ! -d "$OBJDIR" ]; then
+  mkdir $OBJDIR || exit $ERR_FILE
+fi
+
+for i in $PACKAGE; do
+  for d in `find $SRCDIR/$i -type d ! -name par ! -name seq -print | sed -e "s!^$SRCDIR/!$OBJDIR/!"`; do
+    if [ ! -d $d ]; then
+      mkdir $d || exit $ERR_FILE
+    fi
+  done
+  if [ -f $DIR/obj/$i/Makefile ]; then
+    ln -s ../../obj/$i/Makefile $OBJDIR/$i/Makefile
+  fi
+  if [ ! \( -f $OBJDIR/$i/flag-type-$LType -o -f $OBJDIR/$i/flag-type-any \) \
+       -o ! -f $OBJDIR/$i/flag-speed-$LSpeed ]; then
+    rm -f $OBJDIR/$i/flag-* $OBJDIR/$i/*.[od]
+  fi
+  for d in `find $OBJDIR/$i -type d -print`; do
+    $MAKE -i -f $CodeBaseRoot/etc/$ENVIRONMENT/Makefile.obj -C $d \
+      LTYPE=$LType LSPEED=$LSpeed all
+  done
+done
