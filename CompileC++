@@ -89,7 +89,7 @@ fi
 # 2. Call C++ compiler.
 #
 
-exec g++ $* -D_unix  -I$CodeBaseRoot/include\
+exec g++ $* -D_unix -fpermissive  -I$CodeBaseRoot/include\
  -I$CodeBaseRoot/include/Basis \
  -I$CodeBaseRoot/include/BasisSrc \
  -I$CodeBaseRoot/include/REACT/standard\
